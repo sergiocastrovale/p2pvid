@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Two overlapping video frames: one per peer. Safe zone is the central 66dp. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FF7CC4FF"
+        android:pathData="M30,36h30a5,5 0,0 1,5 5v18a5,5 0,0 1,-5 5h-30a5,5 0,0 1,-5 -5v-18a5,5 0,0 1,5 -5z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M48,46h30a5,5 0,0 1,5 5v18a5,5 0,0 1,-5 5h-30a5,5 0,0 1,-5 -5v-18a5,5 0,0 1,5 -5z" />
+    <path
+        android:fillColor="#FF0B0C0F"
+        android:pathData="M59,53.5v13l11,-6.5z" />
+</vector>
