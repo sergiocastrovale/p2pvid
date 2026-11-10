@@ -84,8 +84,6 @@ import kotlin.math.roundToInt
 
 @Composable
 fun CallScreen(vm: CallViewModel, ui: CallUi, onOpenSettings: () -> Unit) {
-    val local by vm.localVideo.collectAsStateWithLifecycle()
-    val remote by vm.remoteVideo.collectAsStateWithLifecycle()
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     val context = LocalContext.current
 
@@ -97,6 +95,9 @@ fun CallScreen(vm: CallViewModel, ui: CallUi, onOpenSettings: () -> Unit) {
         delay(4_000)
         if (ui.phase == Phase.IN_CALL) controlsVisible = false
     }
+    val settings by vm.settings.collectAsStateWithLifecycle()
+    // Overlay (status pills, name tags, PiP frame): always on, or only while controls are shown.
+    val overlayVisible = settings.showOverlay || controlsVisible || ui.phase != Phase.IN_CALL
 
     val storagePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) vm.toggleRecording(landscape) else vm.message("Storage access is needed to save recordings.")
@@ -120,8 +121,9 @@ fun CallScreen(vm: CallViewModel, ui: CallUi, onOpenSettings: () -> Unit) {
         Stage(
             vm = vm,
             ui = ui,
-            trackOf = { if (it == ui.self) local else remote },
+            feedOf = { if (it == ui.self) vm.localFeed else vm.remoteFeed },
             onPipTap = { party -> touch(); vm.focusOn(party) },
+            overlayVisible = overlayVisible,
         )
 
         if (ui.phase == Phase.CONNECTING) {
@@ -132,7 +134,16 @@ fun CallScreen(vm: CallViewModel, ui: CallUi, onOpenSettings: () -> Unit) {
             }
         }
 
-        StatusChips(ui, Modifier.align(Alignment.TopStart).safeDrawingPadding().padding(12.dp))
+        // Same plain 12dp margin as the Host/Guest tags (no system-inset padding, which
+        // pushed the pills toward the middle in landscape).
+        AnimatedVisibility(
+            visible = overlayVisible,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.align(Alignment.TopStart).padding(12.dp),
+        ) {
+            StatusChips(ui, Modifier)
+        }
 
         AnimatedVisibility(
             visible = controlsVisible || ui.phase != Phase.IN_CALL,
@@ -162,8 +173,9 @@ fun CallScreen(vm: CallViewModel, ui: CallUi, onOpenSettings: () -> Unit) {
 private fun Stage(
     vm: CallViewModel,
     ui: CallUi,
-    trackOf: (Party) -> org.webrtc.VideoTrack?,
+    feedOf: (Party) -> com.kp.p2pvid.rtc.VideoFanout,
     onPipTap: (Party) -> Unit,
+    overlayVisible: Boolean,
 ) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val w = maxWidth
@@ -200,20 +212,25 @@ private fun Stage(
             Modifier.width(w / 2).height(bandH).align(Alignment.CenterEnd)
         } else pipBase
 
-        VideoSurface(vm.eglBase, trackOf(mainParty), mirrorOf(mainParty), overlay = false, modifier = mainModifier)
-        VideoSurface(vm.eglBase, trackOf(secondParty), mirrorOf(secondParty), overlay = true, modifier = secondModifier)
+        VideoSurface(vm.eglBase, feedOf(mainParty), mirrorOf(mainParty), overlay = false, modifier = mainModifier)
+        VideoSurface(vm.eglBase, feedOf(secondParty), mirrorOf(secondParty), overlay = true, modifier = secondModifier)
 
         if (!ui.camOn) {
             CameraOffBadge(if (mainParty == ui.self) mainModifier else secondModifier)
         }
         if (dual) {
-            NameTag("Host", Modifier.align(Alignment.CenterStart).offset(y = bandH / 2 - 28.dp).padding(start = 12.dp))
-            NameTag("Guest", Modifier.align(Alignment.CenterEnd).offset(y = bandH / 2 - 28.dp).padding(end = 12.dp))
+            if (overlayVisible) {
+                NameTag("Host", Modifier.align(Alignment.CenterStart).offset(y = bandH / 2 - 28.dp).padding(start = 12.dp))
+                NameTag("Guest", Modifier.align(Alignment.CenterEnd).offset(y = bandH / 2 - 28.dp).padding(end = 12.dp))
+            }
         } else {
             // Touch target over the PiP: drag to move, tap to pin that person.
             Box(
                 pipBase
-                    .border(1.5.dp, Color.White.copy(alpha = 0.7f), RoundedCornerShape(4.dp))
+                    .then(
+                        if (overlayVisible) Modifier.border(1.5.dp, Color.White.copy(alpha = 0.7f), RoundedCornerShape(4.dp))
+                        else Modifier,
+                    )
                     .pointerInput(Unit) {
                         detectDragGestures { change, amount ->
                             change.consume()

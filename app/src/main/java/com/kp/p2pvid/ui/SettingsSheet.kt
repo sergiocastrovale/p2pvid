@@ -92,6 +92,20 @@ fun SettingsSheet(settings: Settings, onChange: (Settings) -> Unit, onDismiss: (
                 Switch(settings.keepScreenOn, { onChange(settings.copy(keepScreenOn = it)) })
             }
 
+            Spacer(Modifier.height(12.dp))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                    Text("Show overlay")
+                    Text(
+                        "Status pills, name tags and the picture-in-picture frame. " +
+                            "When off, only the video shows (and is recorded); tap the screen to reveal everything.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = P2PColors.Muted,
+                    )
+                }
+                Switch(settings.showOverlay, { onChange(settings.copy(showOverlay = it)) })
+            }
+
             Spacer(Modifier.height(24.dp))
             Text(
                 "LAN only: calls connect straight to the other device's local address and never use the internet. " +

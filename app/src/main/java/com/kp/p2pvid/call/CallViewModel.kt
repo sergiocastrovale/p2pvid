@@ -12,6 +12,7 @@ import com.kp.p2pvid.net.LanAddress
 import com.kp.p2pvid.net.SignalChannel
 import com.kp.p2pvid.rec.Recorder
 import com.kp.p2pvid.rtc.RtcSession
+import com.kp.p2pvid.rtc.VideoFanout
 import com.kp.p2pvid.view.Control
 import com.kp.p2pvid.view.DirectorState
 import com.kp.p2pvid.view.Party
@@ -25,9 +26,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
@@ -35,7 +33,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.webrtc.EglBase
 import org.webrtc.PeerConnection.PeerConnectionState
-import org.webrtc.VideoTrack
 import org.webrtc.audio.JavaAudioDeviceModule
 import java.io.IOException
 import java.net.InetSocketAddress
@@ -73,13 +70,10 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
     val ui: StateFlow<CallUi> = _ui.asStateFlow()
 
     private var session: RtcSession? = null
-    private val _sessionFlow = MutableStateFlow<RtcSession?>(null)
-    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-    val localVideo: StateFlow<VideoTrack?> =
-        _sessionFlow.flatMapLatest { it?.localVideo ?: flowOf(null) }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
-    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-    val remoteVideo: StateFlow<VideoTrack?> =
-        _sessionFlow.flatMapLatest { it?.remoteVideo ?: flowOf(null) }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    /** Stable video feeds per party. Renderers/recorder attach here, never to native tracks. */
+    val localFeed = VideoFanout()
+    val remoteFeed = VideoFanout()
 
     private var server: ServerSocket? = null
     private var setupJob: Job? = null
@@ -95,7 +89,10 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
     init {
         // Live quality changes from settings apply to the running call.
         viewModelScope.launch {
-            settings.collect { s -> session?.setQuality(s.quality) }
+            settings.collect { s ->
+                session?.setQuality(s.quality)
+                recorder?.showOverlay = s.showOverlay
+            }
         }
     }
 
@@ -170,9 +167,8 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
         val app = getApplication<Application>()
         CallService.start(app)
         audioRouter.start()
-        val rtc = RtcSession(app, eglBase, channel, isOfferer = self == Party.HOST, viewModelScope, rtcListener)
+        val rtc = RtcSession(app, eglBase, channel, isOfferer = self == Party.HOST, viewModelScope, rtcListener, localFeed, remoteFeed)
         session = rtc
-        _sessionFlow.value = rtc
         rtc.start(s.quality, s.frontCamera)
         callJobs += viewModelScope.launch { rtc.frontCamera.collect { f -> _ui.update { it.copy(frontCamera = f) }; recorder?.mirrorLocal = f } }
         callJobs += viewModelScope.launch {
@@ -348,8 +344,9 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
         }
         rec.mirrorLocal = ui.frontCamera
         rec.micEnabled = ui.micOn
-        localVideo.value?.addSink(rec.localSink)
-        remoteVideo.value?.addSink(rec.remoteSink)
+        rec.showOverlay = settings.value.showOverlay
+        localFeed.add(rec.localSink)
+        remoteFeed.add(rec.remoteSink)
         recorder = rec
         _ui.update { it.copy(recording = true, recordingSinceMs = SystemClock.elapsedRealtime()) }
         send(Control.Recording(true))
@@ -358,8 +355,8 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
     private fun stopRecording() {
         val rec = recorder ?: return
         recorder = null
-        runCatching { localVideo.value?.removeSink(rec.localSink) }
-        runCatching { remoteVideo.value?.removeSink(rec.remoteSink) }
+        localFeed.remove(rec.localSink)
+        remoteFeed.remove(rec.remoteSink)
         rec.stop()
         _ui.update { it.copy(recording = false) }
         send(Control.Recording(false))
@@ -378,7 +375,6 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
         callJobs.clear()
         val rtc = session
         session = null
-        _sessionFlow.value = null
         rtc?.close()
         audioRouter.stop()
         CallService.stop(getApplication())

@@ -56,6 +56,8 @@ class RtcSession(
     private val isOfferer: Boolean,
     private val scope: CoroutineScope,
     private val listener: Listener,
+    private val localFeed: VideoFanout,
+    private val remoteFeed: VideoFanout,
 ) {
     interface Listener {
         fun onConnectionState(state: PeerConnection.PeerConnectionState)
@@ -175,6 +177,7 @@ class RtcSession(
             captureRunning = true
             capturer = cap; textureHelper = helper; videoSource = source
             val track = factory.createVideoTrack("v0", source)
+            track.addSink(localFeed)
             videoSender = pc.addTrack(track, listOf("s0"))
             _localVideo.value = track
             applySenderParams()
@@ -258,7 +261,10 @@ class RtcSession(
 
         override fun onTrack(transceiver: RtpTransceiver) {
             when (val track = transceiver.receiver.track()) {
-                is VideoTrack -> _remoteVideo.value = track
+                is VideoTrack -> {
+                    track.addSink(remoteFeed)
+                    _remoteVideo.value = track
+                }
                 is AudioTrack -> {
                     remoteAudio = track
                     track.addSink(remoteSink)
@@ -344,20 +350,34 @@ class RtcSession(
         }
     }
 
+    /**
+     * Teardown order matters: every native call on a track must happen while the factory
+     * and its threads are still alive. Detach our sinks first, then the peer connection
+     * (which disposes remote tracks), then our own local track refs, then sources, and
+     * the factory last.
+     */
     fun close() {
         readJob?.cancel()
         signal.close()
+        val local = _localVideo.value
+        val remote = _remoteVideo.value
+        _localVideo.value = null
+        _remoteVideo.value = null
+        runCatching { local?.removeSink(localFeed) }
+        runCatching { remote?.removeSink(remoteFeed) }
         runCatching { remoteAudio?.removeSink(remoteSink) }
         if (::control.isInitialized) runCatching { control.unregisterObserver(); control.dispose() }
         if (::pc.isInitialized) runCatching { pc.dispose() }
+        runCatching { local?.dispose() }
+        runCatching { localAudio?.dispose() }
+        localAudio = null
+        remoteAudio = null
         runCatching { audioSource?.dispose() }
         runCatching { if (captureRunning) capturer?.stopCapture() }
         runCatching { capturer?.dispose() }
         runCatching { videoSource?.dispose() }
         runCatching { textureHelper?.dispose() }
         if (::factory.isInitialized) runCatching { factory.dispose() }
-        _localVideo.value = null
-        _remoteVideo.value = null
     }
 
     private fun rms(s: JavaAudioDeviceModule.AudioSamples): Double {

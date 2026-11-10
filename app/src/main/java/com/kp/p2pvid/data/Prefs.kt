@@ -22,6 +22,8 @@ data class Settings(
     val defaultMode: ViewMode = ViewMode.DYNAMIC,
     val frontCamera: Boolean = true,
     val keepScreenOn: Boolean = true,
+    /** Status pills, name tags and PiP frame. Off: only video, overlay appears on tap. */
+    val showOverlay: Boolean = true,
 )
 
 private val Context.store by preferencesDataStore("settings")
@@ -32,6 +34,7 @@ class Prefs(private val context: Context) {
         val mode = stringPreferencesKey("default_mode")
         val front = booleanPreferencesKey("front_camera")
         val screenOn = booleanPreferencesKey("keep_screen_on")
+        val overlay = booleanPreferencesKey("show_overlay")
     }
 
     val settings: Flow<Settings> = context.store.data.map { p ->
@@ -40,6 +43,7 @@ class Prefs(private val context: Context) {
             defaultMode = p[K.mode]?.let { runCatching { ViewMode.valueOf(it) }.getOrNull() } ?: ViewMode.DYNAMIC,
             frontCamera = p[K.front] ?: true,
             keepScreenOn = p[K.screenOn] ?: true,
+            showOverlay = p[K.overlay] ?: true,
         )
     }
 
@@ -49,6 +53,7 @@ class Prefs(private val context: Context) {
             it[K.mode] = s.defaultMode.name
             it[K.front] = s.frontCamera
             it[K.screenOn] = s.keepScreenOn
+            it[K.overlay] = s.showOverlay
         }
     }
 }

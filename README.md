@@ -13,13 +13,13 @@ One device starts a call and gets an invite code. The other enters or scans the 
   - **Dual**: both side by side, center-cropped. Landscape only; the app rotates for it.
 - **Director mode**: whoever switches it on controls the view on both screens (mode, who is locked, who is shown as speaker). The other side can take over by switching it on themselves.
 - **Recording**: records what is on screen, including mode changes, with both sides' audio mixed. Saved as MP4 to `Movies/P2Pvid`. The other device shows that you are recording.
-- **Settings**: outgoing stream quality (360p up to 1080p @ 12 Mbps, applies mid-call), starting view, starting camera, keep screen on.
+- **Settings**: outgoing stream quality (360p up to 1080p @ 12 Mbps, applies mid-call), starting view, starting camera, keep screen on, show overlay (turn off for video only: status pills, name tags and the PiP frame appear only when you tap).
 
 ## Install
 
-- Download or build `p2pvid-1.0.0-debug.apk` (see [Build](#build)).
+- Download or build `p2pvid-1.0.1-debug.apk` (see [Build](#build)).
 - On the phone, allow installing apps from unknown sources for your browser or file manager.
-- Open the APK and install it. Or, with USB debugging on: `adb install p2pvid-1.0.0-debug.apk`.
+- Open the APK and install it. Or, with USB debugging on: `adb install p2pvid-1.0.1-debug.apk`.
 - Do the same on the second phone.
 - Put both phones on the same Wi-Fi, or connect one to the other's hotspot. Mobile data is not used.
 - Open P2Pvid on both phones and allow camera, microphone and notifications.

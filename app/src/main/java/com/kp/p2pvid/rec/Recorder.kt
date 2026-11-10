@@ -47,6 +47,8 @@ class Recorder(
     @Volatile var view: ViewState = initialView
     @Volatile var mirrorLocal: Boolean = true
     @Volatile var micEnabled: Boolean = true
+    /** "Show overlay" setting: draws the light frame around the PiP. Off = video only. */
+    @Volatile var showOverlay: Boolean = true
 
     private val output = MediaOutput.create(context)
     private val muxer = SyncMuxer(output.createMuxer())
@@ -155,11 +157,13 @@ class Recorder(
             val b = tile.box
             val glY = height - b.y - b.h
             if (tile.isPip) {
-                // thin light frame around the picture-in-picture
                 GLES20.glEnable(GLES20.GL_SCISSOR_TEST)
-                GLES20.glScissor(b.x - 2, glY - 2, b.w + 4, b.h + 4)
-                GLES20.glClearColor(1f, 1f, 1f, 0.7f)
-                GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
+                if (showOverlay) {
+                    // thin light frame around the picture-in-picture
+                    GLES20.glScissor(b.x - 2, glY - 2, b.w + 4, b.h + 4)
+                    GLES20.glClearColor(1f, 1f, 1f, 0.7f)
+                    GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
+                }
                 GLES20.glClearColor(0f, 0f, 0f, 1f)
                 GLES20.glScissor(b.x, glY, b.w, b.h)
                 GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
